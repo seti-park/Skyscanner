@@ -415,8 +415,9 @@ class AmadeusFlightMonitor:
     
     def format_message(self, flights: List[Dict]) -> str:
         """텔레그램 메시지 포맷팅"""
-        
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+        kst_now = datetime.now(self.kst)
+        current_time = kst_now.strftime('%Y-%m-%d %H:%M')
         api_remaining = self.get_api_usage()
         
         # 특가 발견시 첫 번째 항공사 코드 가져오기
