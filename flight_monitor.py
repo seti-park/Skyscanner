@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Amadeus API를 활용한 항공 가격 모니터링
-2025년 10월 3일-8일 직항 항공편 모니터링
+2025년 10월 4일-8일 직항 항공편 모니터링
 무료 티어: 월 2,000회 요청 (30분마다 실행 가능)
 """
 
@@ -39,8 +39,8 @@ class AmadeusFlightMonitor:
         
         # 모니터링 설정
         self.origin = "ICN"  # 인천공항
-        self.destination = "NRT"  # 도쿄 나리타
-        self.departure_date = "2025-10-03"
+        self.destination = "HNL"  # 하와이 호놀룰루
+        self.departure_date = "2025-10-04"
         self.return_date = "2025-10-08"
         self.adults = 2
         self.max_price = 1500000  # 150만원 (2인 총액)
@@ -281,7 +281,7 @@ class AmadeusFlightMonitor:
         if not flights:
             return (
                 f"✈️ <b>항공편 모니터링 (Amadeus)</b>\n"
-                f"📅 2025년 10월 3일 ~ 10월 8일\n"
+                f"📅 2025년 10월 4일 ~ 10월 8일\n"
                 f"🛫 {self.origin} → {self.destination}\n"
                 f"👥 {self.adults}인 / 💺 직항\n"
                 f"🔍 검색 시간: {current_time}\n\n"
@@ -291,7 +291,7 @@ class AmadeusFlightMonitor:
         
         message = (
             f"✈️ <b>항공편 발견! ({len(flights)}개)</b>\n"
-            f"📅 2025년 10월 3일 ~ 10월 8일\n"
+            f"📅 2025년 10월 4일 ~ 10월 8일\n"
             f"🛫 {self.origin} → {self.destination}\n"
             f"👥 {self.adults}인 / 💺 직항만\n"
             f"🔍 검색: {current_time}\n"
