@@ -1,15 +1,17 @@
 # ✈️ 항공 가격 자동 모니터링 (GitHub Actions + Telegram)
 
-2025년 10월 3일-8일 직항 항공편을 30분마다 자동으로 모니터링하고 텔레그램으로 알림을 받는 시스템입니다.
+**완전 무료**로 2025년 10월 3일-8일 직항 항공편을 30분마다 자동 모니터링하고 텔레그램으로 알림을 받는 시스템입니다.
 
 ## 🎯 모니터링 조건
+
 - **날짜**: 2025년 10월 3일 출발 - 10월 8일 도착
 - **인원**: 2명
 - **가격**: 150만원 이하
 - **항공편**: 직항만
 - **체크 주기**: 30분마다 자동 실행
+- **비용**: **완전 무료** (Amadeus API 무료 티어 사용)
 
-## 🚀 빠른 시작 가이드
+## 🚀 빠른 시작 가이드 (10분 소요)
 
 ### 1단계: 저장소 Fork 및 Clone
 
@@ -19,49 +21,49 @@ git clone https://github.com/YOUR_USERNAME/flight-monitor.git
 cd flight-monitor
 ```
 
-### 2단계: RapidAPI 키 발급
+### 2단계: Amadeus API 키 발급 (무료)
 
-1. [RapidAPI](https://rapidapi.com) 가입
-2. [Skyscanner API](https://rapidapi.com/3b-data-3b-data-default/api/sky-scanner3) 구독
-   - Basic Plan (무료) 선택 가능
-   - 월 100회 요청 무료 (30분마다 = 하루 48회 = 월 1,440회 필요)
-   - Pro Plan ($10/월) 추천: 월 10,000회 요청
-3. API Key 복사
+1. [Amadeus for Developers](https://developers.amadeus.com) 가입
+1. “My Self-Service Workspace” → “Create new app”
+1. API Key와 API Secret 복사 (중요: Secret은 한 번만 표시됨)
+1. **무료 티어**: 월 2,000회 요청 (30분마다 실행 가능!)
 
 ### 3단계: 텔레그램 봇 생성
 
 1. 텔레그램에서 [@BotFather](https://t.me/BotFather) 검색
-2. 다음 명령어 실행:
+1. 다음 명령어 실행:
+
 ```
 /newbot
 봇 이름 입력: Flight Price Monitor
 봇 username 입력: your_flight_monitor_bot
 ```
-3. 생성된 봇 토큰 저장
 
-4. **Chat ID 확인**:
-   - 생성한 봇에게 아무 메시지 전송
-   - 브라우저에서 접속: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-   - `"chat":{"id":123456789}` 에서 숫자 복사
+1. 생성된 봇 토큰 저장
+1. **Chat ID 확인**:
+- 생성한 봇에게 아무 메시지 전송
+- 브라우저에서 접속: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+- `"chat":{"id":123456789}` 에서 숫자 복사
 
 ### 4단계: GitHub Secrets 설정
 
 GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret
 
-다음 3개의 시크릿 추가:
+다음 4개의 시크릿 추가:
 
-| Name | Value |
-|------|-------|
-| `RAPIDAPI_KEY` | RapidAPI에서 복사한 키 |
-| `TELEGRAM_BOT_TOKEN` | BotFather가 준 토큰 |
-| `TELEGRAM_CHAT_ID` | 위에서 확인한 Chat ID |
+|Name                |Value                    |
+|--------------------|-------------------------|
+|`AMADEUS_API_KEY`   |Amadeus에서 발급받은 API Key   |
+|`AMADEUS_API_SECRET`|Amadeus에서 발급받은 API Secret|
+|`TELEGRAM_BOT_TOKEN`|BotFather가 준 토큰          |
+|`TELEGRAM_CHAT_ID`  |위에서 확인한 Chat ID          |
 
 ### 5단계: GitHub Actions 활성화
 
 1. Actions 탭 클릭
-2. "I understand my workflows, go ahead and enable them" 클릭
-3. 왼쪽 메뉴에서 "Flight Price Monitor" 선택
-4. "Run workflow" 버튼으로 수동 테스트
+1. “I understand my workflows, go ahead and enable them” 클릭
+1. 왼쪽 메뉴에서 “Flight Price Monitor” 선택
+1. “Run workflow” 버튼으로 수동 테스트
 
 ## 📁 파일 구조
 
@@ -97,12 +99,12 @@ self.destination = "HND"  # 하네다
 
 ### 주요 공항 코드
 
-| 한국 | 일본 | 동남아 | 중국 |
-|------|------|--------|------|
-| ICN (인천) | NRT (나리타) | BKK (방콕) | PEK (베이징) |
-| GMP (김포) | HND (하네다) | SIN (싱가포르) | PVG (상하이) |
-| PUS (부산) | KIX (오사카) | KUL (쿠알라룸푸르) | HKG (홍콩) |
-| CJU (제주) | FUK (후쿠오카) | DPS (발리) | TPE (타이베이) |
+|한국      |일본        |동남아         |중국        |
+|--------|----------|------------|----------|
+|ICN (인천)|NRT (나리타) |BKK (방콕)    |PEK (베이징) |
+|GMP (김포)|HND (하네다) |SIN (싱가포르)  |PVG (상하이) |
+|PUS (부산)|KIX (오사카) |KUL (쿠알라룸푸르)|HKG (홍콩)  |
+|CJU (제주)|FUK (후쿠오카)|DPS (발리)    |TPE (타이베이)|
 
 ### 가격 임계값 변경
 
@@ -130,7 +132,7 @@ schedule:
 
 ```
 ✈️ 항공편 발견! (3개)
-📅 2025-10-03 ~ 2025-10-08
+📅 2025년 10월 3일 ~ 10월 8일
 🛫 ICN → NRT
 👥 2인 / 💺 직항만
 🔍 검색: 2025-01-20 14:30
@@ -139,42 +141,67 @@ schedule:
 1. 대한항공
 💰 총 1,450,000원 (1인 725,000원)
 🛫 가는편: 09:20 → 11:45 (2시간 25분)
+   편명: KE001 (T2)
 🛬 오는편: 13:00 → 15:30 (2시간 30분)
+   편명: KE002 (T1)
+💺 예약 가능: 9석
+🎫 클래스: 이코노미
 
 2. 아시아나항공
 💰 총 1,480,000원 (1인 740,000원)
 🛫 가는편: 14:10 → 16:35 (2시간 25분)
+   편명: OZ101
 🛬 오는편: 17:20 → 19:50 (2시간 30분)
+   편명: OZ102
+💺 예약 가능: 5석
+🎫 클래스: 이코노미
+
+==============================
+📊 Amadeus API 무료 티어
+월 2,000회 중 사용 중
 ```
 
 ## ⚠️ 주의사항
 
+### API 제한
+
+- **Amadeus 무료 티어**: 월 2,000회 요청
+- **30분마다 실행**: 하루 48회 × 30일 = 월 1,440회
+- **여유 한도**: 560회 (테스트 및 수동 실행용)
+
 ### GitHub Actions 제한
+
 - **Public 저장소**: 월 2,000분 무료
 - **Private 저장소**: 월 2,000분 무료 (Free 계정)
 - 30분마다 실행 = 하루 48회 × 1분 = 월 1,440분 사용
 - 여유있게 사용 가능
 
-### RapidAPI 제한
-- **Basic (무료)**: 월 100회 - 부족함 ⚠️
-- **Pro ($10/월)**: 월 10,000회 - 충분함 ✅
-- **Ultra ($50/월)**: 월 100,000회
-
 ### 트러블슈팅
 
-1. **"API rate limit exceeded"** 오류
-   - RapidAPI 요청 한도 초과
-   - Pro 플랜 업그레이드 필요
+1. **“Invalid client”** 오류
+- API Key와 Secret 확인
+- 앞뒤 공백 제거
+- Secrets 설정 확인
+1. **텔레그램 메시지 안 옴**
+- Chat ID 확인
+- 봇과 대화 시작했는지 확인
+- GitHub Secrets 설정 확인
+1. **“No flights found”** 결과
+- 너무 임박한 날짜는 결과 없을 수 있음
+- 직항이 없는 노선일 수 있음
+1. **Actions 실행 안 됨**
+- Actions 활성화 확인
+- workflow 파일 문법 확인
+- 저장소 Settings → Actions 권한 확인
 
-2. **텔레그램 메시지 안 옴**
-   - Chat ID 확인
-   - 봇과 대화 시작했는지 확인
-   - GitHub Secrets 설정 확인
+## 💰 비용 분석
 
-3. **Actions 실행 안 됨**
-   - Actions 활성화 확인
-   - workflow 파일 문법 확인
-   - 저장소 Settings → Actions 권한 확인
+|항목            |비용    |설명            |
+|--------------|------|--------------|
+|Amadeus API   |**무료**|월 2,000회 무료 제공|
+|GitHub Actions|**무료**|월 2,000분 무료 제공|
+|텔레그램          |**무료**|메시지 전송 무료     |
+|**총 비용**      |**0원**|완전 무료!        |
 
 ## 📈 개선 아이디어
 
@@ -184,6 +211,16 @@ schedule:
 - [ ] 웹 대시보드 추가
 - [ ] 항공사별 필터링
 - [ ] 좌석 등급 선택 옵션
+- [ ] 경유 1회 허용 옵션
+- [ ] 주말/평일 가격 비교
+
+## 🎉 핵심 장점
+
+- **완전 무료**: API 비용 0원
+- **충분한 한도**: 월 2,000회 (30분마다 실행 가능)
+- **신뢰성 높음**: Amadeus 공식 API (전 세계 항공사 직접 연동)
+- **풍부한 정보**: 좌석 수, 터미널, 클래스 정보 포함
+- **자동화**: GitHub Actions로 24시간 자동 모니터링
 
 ## 📝 라이선스
 
