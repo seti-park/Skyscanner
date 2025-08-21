@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-“””
+"""
 Amadeus API를 활용한 항공 가격 모니터링
 2025년 10월 3일-8일 직항 항공편 모니터링
 무료 티어: 월 2,000회 요청 (30분마다 실행 가능)
-“””
+"""
 
 import os
 import json
@@ -15,7 +15,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 class AmadeusFlightMonitor:
-“”“Amadeus API 항공 모니터링”””
+"""Amadeus API 항공 모니터링"""
 
 ```
 def __init__(self):
