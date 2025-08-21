@@ -47,7 +47,7 @@ class AmadeusFlightMonitor:
         self.departure_date = "2025-10-04"  # 10월 4일로 변경
         self.return_date = "2025-10-08"
         self.adults = 2
-        self.max_price = 1500000  # 150만원 (2인 총액)
+        self.max_price = 3000000  # 150만원 (2인 총액)
         self.direct_only = True  # 직항만
         
     def get_access_token(self) -> str:
