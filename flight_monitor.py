@@ -31,8 +31,12 @@ class AmadeusFlightMonitor:
         
         self.bot = Bot(token=self.telegram_bot_token)
         
-        # Amadeus API 엔드포인트 (테스트 환경)
-        self.base_url = "https://test.api.amadeus.com"
+        # Amadeus API 엔드포인트 (환경에 따라 설정)
+        self.amadeus_env = os.environ.get('AMADEUS_ENV', 'test').lower()
+        if self.amadeus_env in ('prod', 'production', 'live'):
+            self.base_url = "https://api.amadeus.com"
+        else:
+            self.base_url = "https://test.api.amadeus.com"
         
         # OAuth2 토큰
         self.access_token = None
@@ -46,8 +50,11 @@ class AmadeusFlightMonitor:
         self.destination = "HNL"  # 호놀룰루 (하와이)
         self.departure_date = "2025-10-04"  # 10월 4일로 변경
         self.return_date = "2025-10-08"
-        self.adults = 2
-        self.max_price = 3000000  # 150만원 (2인 총액)
+        self.adults = int(os.environ.get('NUM_ADULTS', '2'))
+        # 1인 기준 상한가를 환경 변수로 설정 (기본 1,500,000원)
+        self.max_price_per_person = int(os.environ.get('MAX_PRICE_PER_PERSON', '1500000'))
+        # 총액 기준 상한가
+        self.max_price = self.max_price_per_person * self.adults
         self.direct_only = True  # 직항만
         
     def get_access_token(self) -> str:
@@ -128,15 +135,24 @@ class AmadeusFlightMonitor:
             
             if response.status_code == 200:
                 data = response.json()
-                offers = data.get('data', [])
+                offers, dictionaries = self._extract_offers_and_dicts(data)
                 print(f"검색 성공! {len(offers)}개 항공편 발견")
+
+                # 검색 결과에 대해 실시간 가격/가용성 확인 (Flight Offers Price)
+                priced_data = self.price_offers(offers[:20])  # 상위 20개만 확인하여 API 절약
+                if priced_data:
+                    priced_offers, priced_dicts = self._extract_offers_and_dicts(priced_data)
+                    if priced_offers:
+                        offers = priced_offers
+                        if priced_dicts:
+                            dictionaries = priced_dicts
+                        print(f"실시간 가격 확인 완료: {len(offers)}개")
                 
-                # 딕셔너리 정보도 포함
-                result = {
+                # 결과 반환 (정규화된 형태)
+                return {
                     'data': offers,
-                    'dictionaries': data.get('dictionaries', {})
+                    'dictionaries': dictionaries or {}
                 }
-                return result
             else:
                 print(f"API 오류: {response.status_code}")
                 print(f"응답: {response.text[:500]}")
@@ -218,7 +234,7 @@ class AmadeusFlightMonitor:
                         'departure_terminal': return_segment.get('departure', {}).get('terminal', ''),
                         'arrival_terminal': return_segment.get('arrival', {}).get('terminal', '')
                     },
-                    'booking_class': outbound_segment.get('cabin', 'ECONOMY'),
+                    'booking_class': self._extract_cabin_from_offer(offer, outbound=True),
                     'available_seats': offer.get('numberOfBookableSeats', 'N/A')
                 }
                 
@@ -227,7 +243,7 @@ class AmadeusFlightMonitor:
             # 가격순 정렬
             flights.sort(key=lambda x: x['price_total'])
             
-            print(f"조건 충족 항공편: {len(flights)}개 (150만원 이하 직항)")
+            print(f"조건 충족 항공편: {len(flights)}개 (총 {self.max_price:,.0f}원 이하, {'직항' if self.direct_only else '경유 포함'})")
             
         except Exception as e:
             print(f"파싱 오류: {e}")
@@ -235,6 +251,80 @@ class AmadeusFlightMonitor:
             traceback.print_exc()
         
         return flights
+
+    def _extract_cabin_from_offer(self, offer: Dict, outbound: bool = True) -> str:
+        """travelerPricings.fareDetailsBySegment에서 cabin 추출 (세그먼트 기준)
+        세그먼트 ID가 일치하면 해당 cabin을 사용, 없으면 첫 cabin을 폴백
+        """
+        try:
+            itineraries = offer.get('itineraries', [])
+            itinerary_index = 0 if outbound else 1
+            if len(itineraries) <= itinerary_index:
+                return 'ECONOMY'
+            segments = itineraries[itinerary_index].get('segments', [])
+            if not segments:
+                return 'ECONOMY'
+            first_segment_id = segments[0].get('id')
+
+            traveler_pricings = offer.get('travelerPricings', [])
+            fallback_cabin = None
+            for traveler_pricing in traveler_pricings:
+                for fare_detail in traveler_pricing.get('fareDetailsBySegment', []):
+                    cabin = fare_detail.get('cabin')
+                    if fallback_cabin is None and cabin:
+                        fallback_cabin = cabin
+                    if first_segment_id and fare_detail.get('segmentId') == first_segment_id:
+                        if cabin:
+                            return cabin
+            return fallback_cabin or 'ECONOMY'
+        except Exception:
+            return 'ECONOMY'
+
+    def _extract_offers_and_dicts(self, data: Dict) -> Tuple[List[Dict], Dict]:
+        """Search 또는 Price 응답을 정규화하여 (offers, dictionaries)로 반환"""
+        try:
+            if isinstance(data.get('data'), list):
+                return data.get('data', []), data.get('dictionaries', {})
+            if isinstance(data.get('data'), dict):
+                inner = data.get('data', {})
+                if isinstance(inner.get('flightOffers'), list):
+                    return inner.get('flightOffers', []), data.get('dictionaries', {})
+        except Exception:
+            pass
+        return [], data.get('dictionaries', {})
+
+    def price_offers(self, offers: List[Dict]) -> Dict:
+        """Flight Offers Price API로 실시간 가격/가용성 확인"""
+        if not offers:
+            return {}
+        token = self.get_access_token()
+        if not token:
+            return {}
+        url = f"{self.base_url}/v1/shopping/flight-offers/pricing"
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+        payload = {
+            'data': {
+                'type': 'flight-offers-pricing',
+                'flightOffers': offers
+            }
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                print(f"가격 확인 실패: {resp.status_code}")
+                print(resp.text[:500])
+                return {}
+        except requests.exceptions.Timeout:
+            print("가격 확인 요청 시간 초과")
+            return {}
+        except Exception as e:
+            print(f"가격 확인 오류: {e}")
+            return {}
     
     def format_duration(self, duration_str: str) -> str:
         """ISO 8601 duration을 읽기 쉬운 형식으로 변환"""
@@ -431,7 +521,7 @@ class AmadeusFlightMonitor:
                 f"🛫 {self.origin} → {self.destination}\n"
                 f"👥 {self.adults}인 / 💺 직항\n"
                 f"🔍 검색 시간: {current_time}\n\n"
-                f"❌ 150만원 이하 직항 항공편이 없습니다.\n"
+                f"❌ 총 {self.max_price:,.0f}원 이하 {'직항 ' if self.direct_only else ''}항공편이 없습니다.\n"
                 f"다음 검색: 30분 후\n"
                 f"{booking_links}\n"
                 f"\n{'='*30}\n"
@@ -510,18 +600,19 @@ class AmadeusFlightMonitor:
             cheapest = flights[0]
             airline_name = cheapest.get('airline', '항공사')
             
-            if cheapest['price_total'] <= 1200000:  # 120만원 이하
+            # 1인 기준 가격으로 특가/좋은 가격 기준 안내
+            if cheapest['price_per_person'] <= 1200000:  # 1인 120만원 이하
                 message += (
                     f"{'='*30}\n"
                     f"🎯 <b>특가 알림!</b>\n"
-                    f"{airline_name} {cheapest['price_total']:,.0f}원 (120만원 이하)\n"
+                    f"{airline_name} 1인 {cheapest['price_per_person']:,.0f}원 (120만원 이하)\n"
                     f"빠른 예약을 추천드립니다! 🏃‍♂️"
                 )
-            elif cheapest['price_total'] <= 1350000:  # 135만원 이하
+            elif cheapest['price_per_person'] <= 1350000:  # 1인 135만원 이하
                 message += (
                     f"{'='*30}\n"
                     f"💡 <b>좋은 가격 발견!</b>\n"
-                    f"{airline_name} {cheapest['price_total']:,.0f}원"
+                    f"{airline_name} 1인 {cheapest['price_per_person']:,.0f}원"
                 )
         
         # 예약 사이트 링크 추가
