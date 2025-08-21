@@ -377,7 +377,6 @@ class AmadeusFlightMonitor:
         return airline_names.get(carrier_code, carrier_code)
     
     def get_booking_links(self, carrier_code: str = None) -> str:
-    def get_booking_links(self, carrier_code: str = None) -> str:
         """항공권 검색 사이트 링크들"""
         links = ""
         
