@@ -295,7 +295,7 @@ class AmadeusFlightMonitor:
         """항공사 코드로 공식 예약 사이트 URL 생성"""
         
         # 날짜 포맷 변환
-        dep_date = self.departure_date.replace('-', '')  # 20251003
+        dep_date = self.departure_date.replace('-', '')  # 20251004
         ret_date = self.return_date.replace('-', '')
         
         # 주요 항공사별 예약 링크
