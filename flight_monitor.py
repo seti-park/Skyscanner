@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
+import pytz  # 한국 시간대 처리용
 
 class AmadeusFlightMonitor:
     """Amadeus API 항공 모니터링"""
@@ -37,10 +38,13 @@ class AmadeusFlightMonitor:
         self.access_token = None
         self.token_expires_at = None
         
-        # 모니터링 설정
+        # 한국 시간대 설정
+        self.kst = pytz.timezone('Asia/Seoul')
+        
+        # 모니터링 설정 (인천-호놀룰루, 10월 4일-8일)
         self.origin = "ICN"  # 인천공항
-        self.destination = "HNL"  # 하와이 호놀룰루
-        self.departure_date = "2025-10-04"
+        self.destination = "HNL"  # 호놀룰루 (하와이)
+        self.departure_date = "2025-10-04"  # 10월 4일로 변경
         self.return_date = "2025-10-08"
         self.adults = 2
         self.max_price = 1500000  # 150만원 (2인 총액)
@@ -108,8 +112,10 @@ class AmadeusFlightMonitor:
         }
         
         try:
-            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 항공편 검색 중...")
-            print(f"노선: {self.origin} → {self.destination}")
+            # 한국 시간으로 표시
+            kst_now = datetime.now(self.kst)
+            print(f"\n[{kst_now.strftime('%H:%M:%S')} KST] 항공편 검색 중...")
+            print(f"노선: {self.origin} → {self.destination} (인천-호놀룰루)")
             print(f"날짜: {self.departure_date} ~ {self.return_date}")
             print(f"인원: {self.adults}명, 직항만")
             
@@ -182,8 +188,8 @@ class AmadeusFlightMonitor:
                 return_carrier = return_segments[0].get('carrierCode', '') if return_segments else ''
                 
                 # 항공사 이름 가져오기
-                outbound_airline = carriers.get(outbound_carrier, outbound_carrier)
-                return_airline = carriers.get(return_carrier, return_carrier)
+                outbound_airline = self.get_airline_name(outbound_carrier)
+                return_airline = self.get_airline_name(return_carrier)
                 airline = outbound_airline if outbound_airline == return_airline else f"{outbound_airline}/{return_airline}"
                 
                 # 시간 정보
@@ -191,6 +197,7 @@ class AmadeusFlightMonitor:
                 return_segment = return_segments[0] if return_segments else {}
                 
                 flight_info = {
+                    'carrier_code': outbound_carrier,  # 항공사 코드 저장
                     'airline': airline,
                     'price_per_person': total_price / self.adults,
                     'price_total': total_price,
@@ -273,26 +280,172 @@ class AmadeusFlightMonitor:
         except:
             return datetime_str[:5] if len(datetime_str) > 5 else datetime_str, ""
     
+    def get_api_usage(self) -> str:
+        """API 사용량 계산"""
+        # 현재 날짜 기준 이번 달 사용 예상량 계산
+        now = datetime.now()
+        day_of_month = now.day
+        runs_per_day = 48  # 30분마다 = 하루 48회
+        estimated_usage = day_of_month * runs_per_day
+        remaining = 2000 - estimated_usage
+        
+        return f"약 {remaining}회" if remaining > 0 else "한도 초과 예상"
+    
+    def get_airline_booking_url(self, carrier_code: str) -> str:
+        """항공사 코드로 공식 예약 사이트 URL 생성"""
+        
+        # 날짜 포맷 변환
+        dep_date = self.departure_date.replace('-', '')  # 20251003
+        ret_date = self.return_date.replace('-', '')
+        
+        # 주요 항공사별 예약 링크
+        airline_urls = {
+            # 한국 항공사
+            'KE': f'https://www.koreanair.com/booking/flights?departure={self.origin}&arrival={self.destination}&departure-date={self.departure_date}&return-date={self.return_date}',
+            'OZ': f'https://flyasiana.com/booking/search?departure={self.origin}&arrival={self.destination}',
+            'LJ': 'https://www.jinair.com/booking/index',
+            '7C': 'https://www.jejuair.net/ko/main.do',
+            'TW': 'https://www.twayair.com/main.do',
+            'ZE': 'https://www.eastarjet.com/newstar/PGWBA00001',
+            'BX': 'https://www.airbusan.com/content/individual/',
+            'RS': 'https://www.airseoul.com/ko/main',
+            
+            # 일본 항공사
+            'JL': f'https://www.jal.co.jp/jp/ja/',
+            'NH': f'https://www.ana.co.jp/ja/jp/',
+            
+            # 미국 항공사 (하와이 노선)
+            'HA': 'https://www.hawaiianairlines.co.kr/',
+            'UA': 'https://www.united.com/ko/kr',
+            'DL': 'https://www.delta.com/apac/ko',
+            'AA': 'https://www.aa.com/homePage.do?locale=ko_KR',
+            
+            # 동남아 항공사
+            'SQ': 'https://www.singaporeair.com/ko_KR',
+            'TG': 'https://www.thaiairways.com/ko_KR/index.page',
+            'VN': 'https://www.vietnamairlines.com/kr/ko/home',
+            'PR': 'https://www.philippineairlines.com/ko-kr/kr/home',
+            'MH': 'https://www.malaysiaairlines.com/kr/ko',
+            
+            # 중국 항공사
+            'CA': 'https://www.airchina.kr/',
+            'CZ': 'https://www.csair.com/kr/ko/',
+            'MU': 'https://kr.ceair.com/',
+            
+            # 중동/유럽 항공사
+            'EK': 'https://www.emirates.com/kr/korean/',
+            'QR': 'https://www.qatarairways.com/ko-kr/homepage.html',
+            'TK': 'https://www.turkishairlines.com/ko-kr/',
+            'LH': 'https://www.lufthansa.com/kr/ko/homepage',
+            'AF': 'https://www.airfrance.co.kr/',
+        }
+        
+        # 항공사 코드에 해당하는 URL 반환
+        return airline_urls.get(carrier_code, 'https://www.google.com/travel/flights')
+    
+    def get_airline_name(self, carrier_code: str) -> str:
+        """항공사 코드를 한글 이름으로 변환"""
+        airline_names = {
+            'KE': '대한항공',
+            'OZ': '아시아나',
+            'LJ': '진에어',
+            '7C': '제주항공',
+            'TW': '티웨이',
+            'ZE': '이스타항공',
+            'BX': '에어부산',
+            'RS': '에어서울',
+            'HA': '하와이안항공',
+            'JL': '일본항공',
+            'NH': '전일본공수',
+            'UA': '유나이티드',
+            'DL': '델타',
+            'AA': '아메리칸',
+            'SQ': '싱가포르항공',
+            'TG': '타이항공',
+            'VN': '베트남항공',
+            'PR': '필리핀항공',
+            'MH': '말레이시아항공',
+            'CA': '중국국제항공',
+            'CZ': '중국남방항공',
+            'MU': '중국동방항공',
+            'EK': '에미레이트',
+            'QR': '카타르항공',
+            'TK': '터키항공',
+            'LH': '루프트한자',
+            'AF': '에어프랑스',
+        }
+        return airline_names.get(carrier_code, carrier_code)
+    
+    def get_booking_links(self, carrier_code: str = None) -> str:
+    def get_booking_links(self, carrier_code: str = None) -> str:
+        """항공권 검색 사이트 링크들"""
+        links = ""
+        
+        # 특가 발견시 항공사 직접 링크 우선 제공
+        if carrier_code:
+            airline_url = self.get_airline_booking_url(carrier_code)
+            airline_name = self.get_airline_name(carrier_code)
+            links += (
+                f"\n🎯 <b>항공사 직접 예약 (추천):</b>\n"
+                f"✈️ <a href=\"{airline_url}\">{airline_name} 공식 홈페이지</a>\n"
+            )
+        
+        # 기존 비교 사이트 링크들
+        origin = self.origin
+        dest = self.destination
+        dep_date = self.departure_date
+        ret_date = self.return_date
+        
+        # 구글 항공권 링크 생성
+        google_url = f"https://www.google.com/travel/flights?q=flights+from+{origin}+to+{dest}+on+{dep_date}+return+{ret_date}"
+        
+        # 스카이스캐너 링크
+        skyscanner_url = f"https://www.skyscanner.co.kr/transport/flights/{origin}/{dest}/{dep_date.replace('-', '')}/{ret_date.replace('-', '')}/?adults={self.adults}"
+        
+        # 카약 링크
+        kayak_url = f"https://www.kayak.co.kr/flights/{origin}-{dest}/{dep_date}/{ret_date}/{self.adults}adults"
+        
+        links += (
+            f"\n💡 <b>가격 비교 사이트:</b>\n"
+            f"🔗 <a href=\"{google_url}\">구글 항공권</a>\n"
+            f"🔗 <a href=\"{skyscanner_url}\">스카이스캐너</a>\n"
+            f"🔗 <a href=\"{kayak_url}\">카약</a>"
+        )
+        
+        return links
+    
     def format_message(self, flights: List[Dict]) -> str:
         """텔레그램 메시지 포맷팅"""
         
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+        api_remaining = self.get_api_usage()
+        
+        # 특가 발견시 첫 번째 항공사 코드 가져오기
+        carrier_code = flights[0].get('carrier_code') if flights else None
+        booking_links = self.get_booking_links(carrier_code)
         
         if not flights:
             return (
                 f"✈️ <b>항공편 모니터링 (Amadeus)</b>\n"
-                f"📅 2025년 10월 4일 ~ 10월 8일\n"
+                f"📅 {self.departure_date} ~ {self.return_date}\n"
                 f"🛫 {self.origin} → {self.destination}\n"
                 f"👥 {self.adults}인 / 💺 직항\n"
                 f"🔍 검색 시간: {current_time}\n\n"
                 f"❌ 150만원 이하 직항 항공편이 없습니다.\n"
-                f"다음 검색: 30분 후"
+                f"다음 검색: 30분 후\n"
+                f"{booking_links}\n"
+                f"\n{'='*30}\n"
+                f"📊 API 잔여 횟수: {api_remaining}/2,000회"
             )
+        
+        # 특가 발견시 첫 번째 항공사 코드 가져오기
+        carrier_code = flights[0].get('carrier_code') if flights else None
+        booking_links = self.get_booking_links(carrier_code)
         
         message = (
             f"✈️ <b>항공편 발견! ({len(flights)}개)</b>\n"
-            f"📅 2025년 10월 4일 ~ 10월 8일\n"
-            f"🛫 {self.origin} → {self.destination}\n"
+            f"📅 {self.departure_date} ~ {self.return_date}\n"
+            f"🛫 {self.origin} → {self.destination} (인천-호놀룰루)\n"
             f"👥 {self.adults}인 / 💺 직항만\n"
             f"🔍 검색: {current_time}\n"
             f"{'='*30}\n\n"
@@ -355,34 +508,41 @@ class AmadeusFlightMonitor:
         # 특별 알림
         if flights:
             cheapest = flights[0]
+            airline_name = cheapest.get('airline', '항공사')
+            
             if cheapest['price_total'] <= 1200000:  # 120만원 이하
                 message += (
                     f"{'='*30}\n"
                     f"🎯 <b>특가 알림!</b>\n"
-                    f"최저가 {cheapest['price_total']:,.0f}원 (120만원 이하)\n"
+                    f"{airline_name} {cheapest['price_total']:,.0f}원 (120만원 이하)\n"
                     f"빠른 예약을 추천드립니다! 🏃‍♂️"
                 )
             elif cheapest['price_total'] <= 1350000:  # 135만원 이하
                 message += (
                     f"{'='*30}\n"
                     f"💡 <b>좋은 가격 발견!</b>\n"
-                    f"최저가 {cheapest['price_total']:,.0f}원"
+                    f"{airline_name} {cheapest['price_total']:,.0f}원"
                 )
+        
+        # 예약 사이트 링크 추가
+        message += f"\n{booking_links}"
         
         # API 잔여 한도 정보
         message += (
             f"\n{'='*30}\n"
-            f"📊 Amadeus API 무료 티어\n"
-            f"월 2,000회 중 사용 중"
+            f"📊 API 잔여 횟수: {api_remaining}/2,000회"
         )
         
         return message
     
     async def monitor_and_notify(self):
         """메인 모니터링 함수 - 클래스 메서드로 정의"""
+        kst_now = datetime.now(self.kst)
+        
         print(f"\n{'='*50}")
         print(f"Amadeus API 항공편 모니터링 시작")
-        print(f"시간: {datetime.now()}")
+        print(f"시간: {kst_now.strftime('%Y-%m-%d %H:%M:%S KST')}")
+        print(f"노선: 인천(ICN) → 호놀룰루(HNL)")
         print(f"{'='*50}")
         
         # 항공편 검색
@@ -392,7 +552,7 @@ class AmadeusFlightMonitor:
             # API 오류 시 간단한 알림
             await self.send_telegram_message(
                 f"⚠️ 항공편 검색 실패\n"
-                f"시간: {datetime.now().strftime('%H:%M')}\n"
+                f"시간: {kst_now.strftime('%H:%M KST')}\n"
                 f"API 상태를 확인하세요.\n"
                 f"다음 검색: 30분 후"
             )
@@ -413,7 +573,8 @@ class AmadeusFlightMonitor:
         else:
             print("\n❌ 조건에 맞는 항공편 없음")
         
-        print(f"\n모니터링 완료: {datetime.now()}")
+        kst_end = datetime.now(self.kst)
+        print(f"\n모니터링 완료: {kst_end.strftime('%Y-%m-%d %H:%M:%S KST')}")
         print(f"다음 실행: 30분 후 (GitHub Actions 스케줄)")
 
 # 메인 실행 함수 (클래스 밖에 정의)
