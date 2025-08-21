@@ -1,62 +1,66 @@
 name: Flight Price Monitor
 
 on:
-  schedule:
-    # 30분마다 실행 (UTC 시간)
-    # 한국 시간 기준으로 조정 필요 (KST = UTC + 9)
-    - cron: '*/30 * * * *'
-  
-  # 수동 실행을 위한 트리거
-  workflow_dispatch:
-    inputs:
-      origin:
-        description: '출발 공항 코드 (예: ICN)'
-        required: false
-        default: 'ICN'
-      destination:
-        description: '도착 공항 코드 (예: NRT)'
-        required: false
-        default: 'NRT'
+schedule:
+# 30분마다 실행 (UTC 시간)
+# 한국 시간 기준으로 조정 필요 (KST = UTC + 9)
+- cron: ‘*/30 * * * *’
+
+# 수동 실행을 위한 트리거
+
+workflow_dispatch:
+inputs:
+origin:
+description: ‘출발 공항 코드 (예: ICN)’
+required: false
+default: ‘ICN’
+destination:
+description: ‘도착 공항 코드 (예: NRT)’
+required: false
+default: ‘NRT’
 
 jobs:
-  monitor-flights:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Run flight monitor
-      env:
-        RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # 수동 실행 시 입력값 사용, 없으면 기본값
-        ORIGIN: ${{ github.event.inputs.origin || 'ICN' }}
-        DESTINATION: ${{ github.event.inputs.destination || 'NRT' }}
-      run: |
-        python flight_monitor.py
-    
-    - name: Log monitoring result
-      if: always()
-      run: |
-        echo "모니터링 완료: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "다음 실행: 30분 후"
+monitor-flights:
+runs-on: ubuntu-latest
+
+```
+steps:
+- name: Checkout repository
+  uses: actions/checkout@v3
+
+- name: Set up Python
+  uses: actions/setup-python@v4
+  with:
+    python-version: '3.10'
+
+- name: Cache pip packages
+  uses: actions/cache@v3
+  with:
+    path: ~/.cache/pip
+    key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+    restore-keys: |
+      ${{ runner.os }}-pip-
+
+- name: Install dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+
+- name: Run flight monitor
+  env:
+    AMADEUS_API_KEY: ${{ secrets.AMADEUS_API_KEY }}
+    AMADEUS_API_SECRET: ${{ secrets.AMADEUS_API_SECRET }}
+    TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    # 수동 실행 시 입력값 사용, 없으면 기본값
+    ORIGIN: ${{ github.event.inputs.origin || 'ICN' }}
+    DESTINATION: ${{ github.event.inputs.destination || 'NRT' }}
+  run: |
+    python flight_monitor.py
+
+- name: Log monitoring result
+  if: always()
+  run: |
+    echo "모니터링 완료: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "다음 실행: 30분 후"
+```
