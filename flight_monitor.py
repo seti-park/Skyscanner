@@ -160,50 +160,50 @@ class AmadeusFlightMonitor:
             return None
     
     def parse_flights(self, data: Dict) -> List[Dict]:
-    flights = []
-    offers = data.get('data', [])
-    dictionaries = data.get('dictionaries', {})
-    carriers = dictionaries.get('carriers', {})
+        flights = []
+        offers = data.get('data', [])
+        dictionaries = data.get('dictionaries', {})
+        carriers = dictionaries.get('carriers', {})
     
-    try:
-        for offer in offers:
-            # Pricing API 시도
-            confirmed_offer = self.confirm_price(offer)
+        try:
+            for offer in offers:
+                # Pricing API 시도
+                confirmed_offer = self.confirm_price(offer)
             
-            if confirmed_offer:
-                # Pricing 성공 시 사용
-                price_info = confirmed_offer.get('price', {})
-            else:
-                # Pricing 실패 시 Search 가격 fallback (추정 가격 사용)
-                print("Pricing 실패: Search 가격으로 fallback")
-                price_info = offer.get('price', {})
+                if confirmed_offer:
+                    # Pricing 성공 시 사용
+                   price_info = confirmed_offer.get('price', {})
+                else:
+                    # Pricing 실패 시 Search 가격 fallback (추정 가격 사용)
+                    print("Pricing 실패: Search 가격으로 fallback")
+                    price_info = offer.get('price', {})
             
-            total_price = float(price_info.get('total', '0'))
+                total_price = float(price_info.get('total', '0'))
             
-            # 조건 체크 (2인 총액 400만원 = 1인당 200만원 이하)
-            if total_price > self.max_price:
-                continue
+                # 조건 체크 (2인 총액 400만원 = 1인당 200만원 이하)
+                if total_price > self.max_price:
+                    continue
             
-            # 나머지 파싱 (항공사 추출 등, 기존 코드 유지)
-            # ... (itineraries, outbound_carrier 등)
-            # airline = self.get_airline_name(outbound_carrier)
+                # 나머지 파싱 (항공사 추출 등, 기존 코드 유지)
+                # ... (itineraries, outbound_carrier 등)
+                # airline = self.get_airline_name(outbound_carrier)
             
-            flight_info = {
-                'carrier_code': outbound_carrier,
-                'airline': airline,
-                'price_per_person': total_price / self.adults,  # fallback 가격
-                'price_total': total_price,
-                # ... (나머지)
-            }
-            flights.append(flight_info)
+                flight_info = {
+                    'carrier_code': outbound_carrier,
+                    'airline': airline,
+                    'price_per_person': total_price / self.adults,  # fallback 가격
+                    'price_total': total_price,
+                    # ... (나머지)
+                }
+                flights.append(flight_info)
         
-        flights.sort(key=lambda x: x['price_total'])
-        print(f"조건 충족 항공편: {len(flights)}개 (200만원 이하 직항)")
+            flights.sort(key=lambda x: x['price_total'])
+            print(f"조건 충족 항공편: {len(flights)}개 (200만원 이하 직항)")
     
-    except Exception as e:
-        print(f"파싱 오류: {e}")
+        except Exception as e:
+            print(f"파싱 오류: {e}")
     
-    return flights
+        return flights
     
     # 나머지 메서드 (format_duration, send_telegram_message, format_time, get_airline_booking_url 등)는 당신 코드와 동일. 
     # get_airline_booking_url: KE URL 포맷 수정 (departure-date=2025-10-04 등 실제 사이트 맞춤)
