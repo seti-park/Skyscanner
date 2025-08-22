@@ -174,7 +174,6 @@ class AmadeusFlightMonitor:
             'nonStop': 'true' if self.direct_only else 'false',
             'currencyCode': 'KRW',
             'max': 50,
-            'includeCabinBaggage': 'true'  # 수하물 정보 포함
         }
         
         try:
