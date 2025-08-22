@@ -2,9 +2,7 @@ name: Flight Price Monitor
 
 on:
   schedule:
-    # Runs every 30 minutes (UTC)
-    # Adjust for Korea Standard Time (KST = UTC +9) as needed
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *'  # UTC 30분마다; KST 조정 필요 시 '0,30 15-23,0-14 * * *'
   workflow_dispatch:
     inputs:
       origin:
@@ -12,24 +10,24 @@ on:
         required: false
         default: "ICN"
       destination:
-        description: "도착 공항 코드 (예: NRT)"
+        description: "도착 공항 코드 (예: HNL)"  # 원래 의도대로 HNL로 수정
         required: false
-        default: "NRT"
+        default: "HNL"
 
 jobs:
   monitor-flights:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # v3 → v4로 업데이트 (보안 개선)
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5  # v4 → v5로 업데이트
         with:
           python-version: '3.10'
 
       - name: Cache pip packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4  # v3 → v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -47,8 +45,8 @@ jobs:
           AMADEUS_API_SECRET: ${{ secrets.AMADEUS_API_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ORIGIN: ${{ github.event.inputs.origin || 'ICN' }}
-          DESTINATION: ${{ github.event.inputs.destination || 'NRT' }}
+          ORIGIN: ${{ inputs.origin || 'ICN' }}  # workflow_dispatch 입력 우선
+          DESTINATION: ${{ inputs.destination || 'HNL' }}
         run: |
           python flight_monitor.py
 
@@ -57,3 +55,4 @@ jobs:
         run: |
           echo "모니터링 완료: $(date '+%Y-%m-%d %H:%M:%S')"
           echo "다음 실행: 30분 후"
+          # 로그 강화: 스크립트 출력 확인 (예: tail -n 50 output.log if any)
