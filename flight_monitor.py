@@ -14,6 +14,7 @@ import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 import pytz  # 한국 시간대 처리용
+import time  # 재시도 대기용
 
 class AmadeusFlightMonitor:
     """Amadeus API 항공 모니터링"""
@@ -31,7 +32,7 @@ class AmadeusFlightMonitor:
         
         self.bot = Bot(token=self.telegram_bot_token)
         
-        # Amadeus API 엔드포인트 (프로덕션 환경으로 변경)
+        # Amadeus API 엔드포인트 (프로덕션)
         self.base_url = "https://api.amadeus.com"
         
         # OAuth2 토큰
@@ -41,9 +42,9 @@ class AmadeusFlightMonitor:
         # 한국 시간대 설정
         self.kst = pytz.timezone('Asia/Seoul')
         
-        # 모니터링 설정 (인천-호놀룰루, 10월 4일-8일)
-        self.origin = os.environ.get('ORIGIN', 'ICN')  # ORIGIN env 없으면 'ICN' 기본값
-        self.destination = os.environ.get('DESTINATION', 'HNL')  # DESTINATION env 없으면 'HNL' 기본값
+        # 모니터링 설정 (YAML env 읽기)
+        self.origin = os.environ.get('ORIGIN', 'ICN')
+        self.destination = os.environ.get('DESTINATION', 'HNL')
         self.departure_date = "2025-10-04"
         self.return_date = "2025-10-08"
         self.adults = 2
@@ -128,7 +129,7 @@ class AmadeusFlightMonitor:
             return {}
     
     def confirm_price(self, offer: Dict) -> Optional[Dict]:
-        """Pricing API로 가격 확인 - 정확성 향상"""
+        """Pricing API로 가격 확인 - 재시도 추가"""
         token = self.get_access_token()
         if not token:
             return None
@@ -147,66 +148,118 @@ class AmadeusFlightMonitor:
             }
         }
         
-        try:
-            response = requests.post(pricing_url, headers=headers, json=payload, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('data', {}).get('flightOffers', [None])[0]
-            else:
-                print(f"Pricing API 오류: {response.status_code} - {response.text[:200]}")
-                return None
-        except Exception as e:
-            print(f"Pricing 오류: {e}")
-            return None
+        for attempt in range(3):  # 3회 재시도
+            try:
+                response = requests.post(pricing_url, headers=headers, json=payload, timeout=30)
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get('data', {}).get('flightOffers', [None])[0]
+                else:
+                    print(f"Pricing API 오류 (재시도 {attempt+1}): {response.status_code} - {response.text[:200]}")
+            except Exception as e:
+                print(f"Pricing 재시도 {attempt+1} 오류: {e}")
+            time.sleep(5)  # 5초 대기
+        
+        return None
     
     def parse_flights(self, data: Dict) -> List[Dict]:
+        """Amadeus API 응답 파싱 - Pricing 실패 시 fallback 강화"""
+        
         flights = []
         offers = data.get('data', [])
         dictionaries = data.get('dictionaries', {})
         carriers = dictionaries.get('carriers', {})
-    
+        
         try:
             for offer in offers:
-                # Pricing API 시도
+                # Pricing 시도
                 confirmed_offer = self.confirm_price(offer)
-            
+                
                 if confirmed_offer:
-                    # Pricing 성공 시 사용
-                   price_info = confirmed_offer.get('price', {})
+                    price_info = confirmed_offer.get('price', {})
+                    is_pricing_success = True
                 else:
-                    # Pricing 실패 시 Search 가격 fallback (추정 가격 사용)
                     print("Pricing 실패: Search 가격으로 fallback")
                     price_info = offer.get('price', {})
-            
+                    is_pricing_success = False
+                
                 total_price = float(price_info.get('total', '0'))
-            
-                # 조건 체크 (2인 총액 400만원 = 1인당 200만원 이하)
-                if total_price > self.max_price:
+                per_person = total_price / self.adults
+                
+                # 여정 정보 (직항 체크 등, 기존 로직 가정)
+                itineraries = offer.get('itineraries', [])
+                if len(itineraries) < 2:
                     continue
+                
+                outbound_itinerary = itineraries[0]
+                return_itinerary = itineraries[1]
+                
+                outbound_segments = outbound_itinerary.get('segments', [])
+                return_segments = return_itinerary.get('segments', [])
+                
+                if self.direct_only and (len(outbound_segments) > 1 or len(return_segments) > 1):
+                    continue
+                
+                # 항공사 정보
+                outbound_carrier = outbound_segments[0].get('carrierCode', '') if outbound_segments else ''
+                airline = self.get_airline_name(outbound_carrier)
+                
+                # 조건 체크: 1인당 200만원 이하
+                if per_person <= 2000000:
+                    flight_info = {
+                        'carrier_code': outbound_carrier,
+                        'airline': airline,
+                        'price_per_person': per_person if is_pricing_success else '추정 가격 (Pricing 실패로 확인 불가)',
+                        'price_total': total_price,
+                        'currency': price_info.get('currency', 'KRW'),
+                        # ... (기존 다른 정보: outbound, inbound 등 추가 가능)
+                    }
+                    flights.append(flight_info)
             
-                # 나머지 파싱 (항공사 추출 등, 기존 코드 유지)
-                # ... (itineraries, outbound_carrier 등)
-                # airline = self.get_airline_name(outbound_carrier)
-            
-                flight_info = {
-                    'carrier_code': outbound_carrier,
-                    'airline': airline,
-                    'price_per_person': total_price / self.adults,  # fallback 가격
-                    'price_total': total_price,
-                    # ... (나머지)
-                }
-                flights.append(flight_info)
-        
             flights.sort(key=lambda x: x['price_total'])
             print(f"조건 충족 항공편: {len(flights)}개 (200만원 이하 직항)")
-    
+        
         except Exception as e:
             print(f"파싱 오류: {e}")
-    
+        
         return flights
     
-    # 나머지 메서드 (format_duration, send_telegram_message, format_time, get_airline_booking_url 등)는 당신 코드와 동일. 
-    # get_airline_booking_url: KE URL 포맷 수정 (departure-date=2025-10-04 등 실제 사이트 맞춤)
+    # ... (기존 메서드: get_airline_name, get_airline_booking_url, format_duration, format_time, send_telegram_message 등 유지)
+    
+    def format_message(self, flights: List[Dict]) -> str:
+        """텔레그램 메시지 포맷팅 - 가격 없어도 항공사 출력"""
+        kst_now = datetime.now(self.kst)
+        current_time = kst_now.strftime('%Y-%m-%d %H:%M')
+        
+        if not flights:
+            return (
+                f"✈️ <b>항공편 모니터링 (Amadeus)</b>\n"
+                f"📅 {self.departure_date} ~ {self.return_date}\n"
+                f"🛫 {self.origin} → {self.destination}\n"
+                f"👥 {self.adults}인 / 💺 직항\n"
+                f"🔍 검색 시간: {current_time}\n\n"
+                f"❌ 200만원 이하 직항 항공편이 없습니다.\n"
+                f"다음 검색: 30분 후"
+            )
+        
+        message = (
+            f"✈️ <b>항공편 발견! ({len(flights)}개)</b>\n"
+            f"📅 {self.departure_date} ~ {self.return_date}\n"
+            f"🛫 {self.origin} → {self.destination}\n"
+            f"👥 {self.adults}인 / 💺 직항만\n"
+            f"🔍 검색: {current_time}\n"
+            f"{'='*30}\n\n"
+            f"<b>조건 충족 항공사 목록 (200만원 이하):</b>\n"
+        )
+        
+        for i, flight in enumerate(flights, 1):
+            price_str = f"{int(flight['price_per_person'])} KRW" if isinstance(flight['price_per_person'], (int, float)) else flight['price_per_person']
+            message += f"{i}. {flight['airline']} ({flight['carrier_code']}): 1인당 {price_str}\n"
+        
+        # 예약 링크 등 추가 (기존 로직)
+        message += "\n공식 사이트에서 확인하세요."
+        
+        return message
     
     async def monitor_and_notify(self):
         """메인 모니터링 함수"""
@@ -214,23 +267,20 @@ class AmadeusFlightMonitor:
         
         data = self.search_flights()
         if not data:
-            # 오류 시 Telegram 알림 (조건 미달 시 알림 안 보내기)
             return
         
         flights = self.parse_flights(data)
         
-        if flights:  # 조건 충족 시만 알림
+        if flights:  # 조건 충족 시 알림
             message = self.format_message(flights)
             await self.send_telegram_message(message)
 
-# 메인 실행 (Actions용 1회 실행)
 async def main():
     try:
         monitor = AmadeusFlightMonitor()
         await monitor.monitor_and_notify()
     except Exception as e:
         print(f"실행 오류: {e}")
-        # Telegram 오류 알림 (기존)
 
 if __name__ == "__main__":
     asyncio.run(main())
