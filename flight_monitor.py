@@ -42,8 +42,8 @@ class AmadeusFlightMonitor:
         self.kst = pytz.timezone('Asia/Seoul')
         
         # 모니터링 설정 (인천-호놀룰루, 10월 4일-8일)
-        self.origin = "ICN"  # 인천공항
-        self.destination = "HNL"  # 호놀룰루 (하와이)
+        self.origin = os.environ.get('ORIGIN', 'ICN')  # ORIGIN env 없으면 'ICN' 기본값
+        self.destination = os.environ.get('DESTINATION', 'HNL')  # DESTINATION env 없으면 'HNL' 기본값
         self.departure_date = "2025-10-04"
         self.return_date = "2025-10-08"
         self.adults = 2
