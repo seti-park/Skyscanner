@@ -198,22 +198,23 @@ class AmadeusFlightMonitor:
         """Pricing API로 가격 확인 - 실패 시 원본 반환"""
         token = self.get_access_token()
         if not token:
-            return offer  # 토큰 실패 시 원본 반환
-        
-        pricing_url = f"{self.base_url}/v2/shopping/flight-offers/pricing"
-        
+             return offer  # 토큰 실패 시 원본 반환
+    
+        pricing_url = f"{self.base_url}/v1/shopping/flight-offers/pricing"
+    
         headers = {
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json',
+            'X-HTTP-Method-Override': 'GET'  # 여기 추가 – 서버가 POST를 GET처럼 처리
         }
-        
+    
         payload = {
             'data': {
                 'type': 'flight-offers-pricing',
                 'flightOffers': [offer]
             }
         }
-        
+    
         max_retries = 2  # 재시도 횟수 줄임
         for attempt in range(max_retries):
             try:
@@ -228,10 +229,10 @@ class AmadeusFlightMonitor:
                     logger.error(f"Pricing API 오류: {response.status_code}")
             except Exception as e:
                 logger.error(f"Pricing 오류 (시도 {attempt+1}): {e}")
-            
+        
             if attempt < max_retries - 1:
                 time.sleep(2)
-        
+    
         # Pricing 실패 시 원본 offer 반환
         logger.info("Pricing API 실패 - Search 결과 사용")
         return offer
