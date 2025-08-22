@@ -2,3 +2,4 @@ requests>=2.31.0
 python-telegram-bot>=20.3
 python-dotenv>=1.0.0
 pytz>=2024.1  # 한국 시간대 처리용
+amadeus>=1.0.0  # Amadeus SDK 추가 - 인증/요청 자동화
